@@ -1,0 +1,16 @@
+{
+  "name": "ue-extension-starter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@adobe/uix-guest": "^1.0.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Form Builder</title>
+    <script type="module" src="/src/rail.js"></script>
+  </head>
+  <body>
+    <main class="rail-shell">
+      <h1>Form Builder</h1>
+      <p class="rail-hint">Define the form and its inputs. Changes render on the page.</p>
+
+      <section class="builder-section">
+        <label class="form-label">Form title</label>
+        <input id="formTitle" type="text" />
+        <label class="form-label">Submit button label</label>
+        <input id="submitLabel" type="text" />
+      </section>
+
+      <section class="builder-section">
+        <div class="builder-head">
+          <h2>Inputs</h2>
+          <button id="addField" type="button" class="btn-secondary">+ Add input</button>
+        </div>
+        <div id="fields"></div>
+      </section>
+
+      <section class="builder-section">
+        <h2>Preview</h2>
+        <div id="preview" class="preview-box"></div>
+      </section>
+
+      <section class="builder-section">
+        <button id="applyToBlock" type="button">Apply to selected Form block</button>
+        <p class="rail-hint">
+          Select the Form block on the page first, then apply. Each input is
+          added as a Form Field inside it.
+        </p>
+        <p id="syncStatus" class="status" hidden></p>
+      </section>
+
+      <p id="railStatus" class="status">Connecting…</p>
+    </main>
+  </body>
+</html>
