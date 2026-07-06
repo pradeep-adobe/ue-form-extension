@@ -9,7 +9,12 @@
   <body>
     <main class="rail-shell">
       <h1>Form Builder</h1>
-      <p class="rail-hint">Define the form and its inputs. Changes render on the page.</p>
+      <p class="rail-hint">
+        Select a Form block on the page, then author here. The form renders
+        live in the page preview (left). Switch selection to edit another form.
+      </p>
+
+      <p id="boundStatus" class="status">No Form block selected.</p>
 
       <section class="builder-section">
         <label class="form-label">Form title</label>
@@ -26,20 +31,7 @@
         <div id="fields"></div>
       </section>
 
-      <section class="builder-section">
-        <h2>Preview</h2>
-        <div id="preview" class="preview-box"></div>
-      </section>
-
-      <section class="builder-section">
-        <button id="applyToBlock" type="button">Apply to selected Form block</button>
-        <p class="rail-hint">
-          Select the Form block on the page first, then apply. Each input is
-          added as a Form Field inside it.
-        </p>
-        <p id="syncStatus" class="status" hidden></p>
-      </section>
-
+      <p id="syncStatus" class="status" hidden></p>
       <p id="railStatus" class="status">Connecting…</p>
     </main>
   </body>

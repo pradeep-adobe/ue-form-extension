@@ -3,43 +3,56 @@ import { attach } from '@adobe/uix-guest'
 import {
   INPUT_TYPES,
   createField,
-  loadSpec,
   saveSpec,
-  renderForm,
   typeSupportsOptions,
 } from './formSpec.js'
 
 const EXTENSION_ID = 'com.example.ue-hosted-starter'
+const SYNC_DEBOUNCE_MS = 200
+const SELECTION_POLL_MS = 300
 
-let spec = loadSpec()
+let spec = emptySpec()
 let connection = null
 
+let boundEditable = null
+let boundResource = null
+let suppressSync = false
+
 const fieldsEl = document.getElementById('fields')
-const previewEl = document.getElementById('preview')
 const titleEl = document.getElementById('formTitle')
 const submitLabelEl = document.getElementById('submitLabel')
 const syncStatusEl = document.getElementById('syncStatus')
+const boundStatusEl = document.getElementById('boundStatus')
 
-// The component id from poc-tfs-form/component-definition.json used for each input.
-const FORM_FIELD_COMPONENT_ID = 'form-field'
-
-function setSyncStatus(message) {
-  if (!syncStatusEl) return
-  syncStatusEl.hidden = false
-  syncStatusEl.textContent = message
+function emptySpec() {
+  return { title: '', submitLabel: 'Submit', fields: [] }
 }
 
-function toast(variant, message) {
-  try {
-    connection?.host?.editorActions?.toast(variant, message)
-  } catch {
-    // toast is best-effort; ignore when not attached to a host
+function setSyncStatus(message, { hideAfterMs } = {}) {
+  if (!syncStatusEl) return
+  syncStatusEl.hidden = !message
+  syncStatusEl.textContent = message || ''
+  if (message && hideAfterMs) {
+    clearTimeout(setSyncStatus._timer)
+    setSyncStatus._timer = setTimeout(() => {
+      syncStatusEl.hidden = true
+    }, hideAfterMs)
   }
 }
 
-// Heuristics to recognise the Form block and its Form Field children in the
-// editor state. The exact editable shape varies by host, so we probe several
-// common properties (filter/model/type/name/resource/resourceType).
+function setBoundStatus(message) {
+  if (boundStatusEl) boundStatusEl.textContent = message
+}
+
+function slugify(value, fallback) {
+  const slug = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || fallback
+}
+
 function editableHaystack(e) {
   return [e?.type, e?.model, e?.name, e?.filter, e?.resource, e?.resourceType]
     .filter(Boolean)
@@ -47,205 +60,346 @@ function editableHaystack(e) {
     .toLowerCase()
 }
 
-function isFormFieldEditable(e) {
-  if (!e) return false
-  if (e.model === 'form-field') return true
-  return /form-field/.test(editableHaystack(e))
-}
-
 function isFormContainer(e) {
   if (!e) return false
-  if (isFormFieldEditable(e)) return false
+  if (e.model === 'form') return true
   if (e.filter === 'form') return true
-  return /(^|[^-])form(\b|[^-])/.test(editableHaystack(e))
+  if (String(e.name || '').toLowerCase() === 'form') return true
+  const hay = editableHaystack(e)
+  return /(^|\s)form(\s|$)/.test(hay) && !/form-field/.test(hay)
 }
 
-// Resolve the Form block container the author currently has selected. Falls
-// back to searching all editables for a Form block when nothing is selected.
-async function resolveFormContainer(conn) {
-  const state = await conn.host.editorState.get()
-  // eslint-disable-next-line no-console
-  console.log('[form-builder] editorState', state)
-
+function resolveFormContainer(state) {
   const editables = state?.editables || []
   const selected = state?.selected || []
   const first = selected[0]
   const selectedId = typeof first === 'string' ? first : first?.id
 
-  let editable = editables.find((e) => e.id === selectedId) || (typeof first === 'object' ? first : null)
+  let editable = editables.find((e) => e.id === selectedId)
+    || (typeof first === 'object' ? first : null)
 
-  // If a child field is selected, climb to its parent container.
-  if (editable && isFormFieldEditable(editable)) {
+  // Selected the formConfig property directly — use its parent block.
+  if (editable?.prop === 'formConfig') {
     const parentId = editable.parentId || editable.parent
-    const parent = editables.find((e) => e.id === parentId)
+    const parent = editables.find((e) => e.id === parentId || e.resource === parentId)
     if (parent) editable = parent
+  }
+
+  if (editable && !isFormContainer(editable)) {
+    const parentId = editable.parentId || editable.parent
+    const parent = editables.find((e) => e.id === parentId || e.resource === parentId)
+    if (parent && isFormContainer(parent)) editable = parent
   }
 
   if (isFormContainer(editable)) return editable
 
-  // No usable selection: search editables for a Form block container.
+  // Auto-bind when the page has exactly one Form block.
   const candidates = editables.filter(isFormContainer)
-  // eslint-disable-next-line no-console
-  console.log('[form-builder] container candidates', candidates)
   if (candidates.length === 1) return candidates[0]
 
-  // Last resort: use whatever is selected (author may have picked the block
-  // even if our heuristics did not recognise it), otherwise the first block.
-  if (editable) return editable
-  if (candidates.length > 0) return candidates[0]
-
-  // eslint-disable-next-line no-console
-  console.warn('[form-builder] no Form block found. editables:', editables.length, 'selected:', selected)
   return null
 }
 
-function fieldPatches(field) {
-  const patches = [
-    ['/type', field.type || 'text'],
-    ['/label', field.label || ''],
-    ['/required', !!field.required],
-  ]
-  if (typeSupportsOptions(field.type)) {
-    patches.push(['/options', (field.options || []).map((o) => o.label || o.value).join('\n')])
+function parseConfigString(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && Array.isArray(parsed.fields)) return parsed
+  } catch {
+    // not valid JSON
   }
-  return patches
+  return null
 }
 
-// Adds one Form Field to the container, then writes its properties. The add
-// action does not return the new editable, so we diff editor state to find it.
-async function addFieldToContainer(conn, container, field) {
-  const before = new Set(((await conn.host.editorState.get())?.editables || []).map((e) => e.id))
-  await conn.host.editorActions.add(container, FORM_FIELD_COMPONENT_ID)
-  const after = (await conn.host.editorState.get())?.editables || []
-  const created = after.find((e) => !before.has(e.id))
-  if (!created) {
-    // eslint-disable-next-line no-console
-    console.warn('[form-builder] could not locate newly added field editable')
+function deepScanForConfig(editable) {
+  if (!editable) return null
+
+  const direct = editable.formConfig
+    ?? editable.content
+    ?? editable.value
+    ?? editable.properties?.formConfig
+    ?? editable.data?.formConfig
+  const fromDirect = parseConfigString(typeof direct === 'string' ? direct : null)
+  if (fromDirect) return fromDirect
+
+  const candidates = []
+  const visit = (obj, depth) => {
+    if (!obj || depth > 4 || typeof obj !== 'object') return
+    Object.keys(obj).forEach((key) => {
+      const value = obj[key]
+      if (typeof value === 'string' && value.includes('"fields"')) {
+        candidates.push(value)
+      } else if (value && typeof value === 'object') {
+        visit(value, depth + 1)
+      }
+    })
+  }
+  visit(editable, 0)
+  for (let i = 0; i < candidates.length; i += 1) {
+    const parsed = parseConfigString(candidates[i])
+    if (parsed) return parsed
+  }
+  return null
+}
+
+function parseConfigFromDetailsData(data, editable) {
+  if (data == null) return null
+
+  if (typeof data === 'string') {
+    return parseConfigString(data)
+  }
+
+  if (typeof data === 'object') {
+    const raw = data.formConfig ?? data.content ?? data.value ?? data.text
+    const fromField = parseConfigString(typeof raw === 'string' ? raw : null)
+    if (fromField) return fromField
+
+    if (editable?.prop === 'formConfig') {
+      const fromProp = deepScanForConfig(data)
+      if (fromProp) return fromProp
+    }
+
+    return deepScanForConfig(data)
+  }
+
+  return null
+}
+
+async function fetchConfigViaDetails(editable) {
+  if (!connection || !editable) return null
+
+  const attempts = [
+    { editable },
+    editable,
+  ]
+
+  for (let i = 0; i < attempts.length; i += 1) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await connection.host.editorActions.details(attempts[i])
+      const config = parseConfigFromDetailsData(result?.data, editable)
+      if (config) return config
+    } catch {
+      // try next shape
+    }
+  }
+
+  return null
+}
+
+async function loadConfigFromState(container, state) {
+  if (!container || !state) return null
+
+  const editables = state?.editables || []
+  const propEditable = findFormConfigPropEditable(editables, container)
+
+  // Saved values are returned by details(), not always present on editorState editables.
+  if (propEditable) {
+    const fromDetails = await fetchConfigViaDetails(propEditable)
+    if (fromDetails) return fromDetails
+
+    const fromProp = deepScanForConfig(propEditable)
+    if (fromProp) return fromProp
+  }
+
+  const fromContainerDetails = await fetchConfigViaDetails(container)
+  if (fromContainerDetails) return fromContainerDetails
+
+  return deepScanForConfig(container)
+}
+
+function toConfigJSON(currentSpec) {
+  return {
+    title: currentSpec.title || '',
+    submitLabel: currentSpec.submitLabel || 'Submit',
+    fields: (currentSpec.fields || []).map((field, index) => ({
+      type: field.type,
+      label: field.label,
+      name: field.name || slugify(field.label, `field-${index}`),
+      placeholder: field.placeholder || '',
+      required: !!field.required,
+      options: (field.options || [])
+        .map((opt) => (typeof opt === 'string' ? opt : opt.label || opt.value || ''))
+        .filter(Boolean),
+    })),
+  }
+}
+
+function fromConfig(config) {
+  return {
+    title: config.title || '',
+    submitLabel: config.submitLabel || 'Submit',
+    fields: (config.fields || []).map((field) => createField({
+      type: field.type || 'text',
+      label: field.label || '',
+      name: field.name || '',
+      placeholder: field.placeholder || '',
+      required: !!field.required,
+      options: (field.options || []).map((opt) => (
+        typeof opt === 'string' ? { label: opt, value: opt } : opt
+      )),
+    })),
+  }
+}
+
+let syncTimer = null
+
+function scheduleSync() {
+  if (suppressSync) return
+  if (!connection) {
+    setSyncStatus('Not connected to Universal Editor.', { hideAfterMs: 2500 })
     return
   }
-  for (const [path, value] of fieldPatches(field)) {
+  if (!boundEditable) {
+    setSyncStatus('Select a Form block on the page first.', { hideAfterMs: 2500 })
+    return
+  }
+  clearTimeout(syncTimer)
+  syncTimer = setTimeout(doSync, SYNC_DEBOUNCE_MS)
+}
+
+function findFormConfigPropEditable(editables, container) {
+  const matchParent = (e) => {
+    const parent = e.parentId || e.parent
+    return parent === container.id
+      || parent === container.resource
+      || parent === container.id?.split?.('/')?.pop?.()
+  }
+
+  const direct = editables.find((e) => e.prop === 'formConfig' && matchParent(e))
+  if (direct) return direct
+
+  // Match by resource path when parent ids differ between host versions.
+  if (container.resource) {
+    const byResource = editables.find((e) => (
+      e.prop === 'formConfig'
+      && e.resource
+      && String(e.resource).startsWith(String(container.resource))
+    ))
+    if (byResource) return byResource
+  }
+
+  const all = editables.filter((e) => e.prop === 'formConfig')
+  if (all.length === 1) return all[0]
+  return null
+}
+
+async function buildPatchAttempts(container, state) {
+  const editables = state?.editables || []
+  const propEditable = findFormConfigPropEditable(editables, container)
+
+  const attempts = []
+  const add = (target, path) => attempts.push({ target, path })
+
+  // Property-level editable is what xwalk persists to the document.
+  if (propEditable) {
+    add({ editable: { id: propEditable.id, resource: propEditable.resource } }, '/formConfig')
+    add({ editable: { id: propEditable.id } }, '/formConfig')
+    add({ editable: propEditable }, '/formConfig')
+    add({ editable: propEditable }, `/${propEditable.prop}`)
+  }
+
+  add({ editable: { id: container.id, resource: container.resource } }, '/formConfig')
+  add({ editable: { id: container.id } }, '/formConfig')
+  add({ editable: container }, '/formConfig')
+
+  return attempts
+}
+
+async function patchFormConfig(container, value) {
+  const state = await connection.host.editorState.get()
+  const attempts = await buildPatchAttempts(container, state)
+
+  let lastError
+  for (let i = 0; i < attempts.length; i += 1) {
+    const { target, path } = attempts[i]
     try {
-      await conn.host.editorActions.update({
-        target: { editable: created },
+      // eslint-disable-next-line no-await-in-loop
+      await connection.host.editorActions.update({
+        target,
         patch: [{ op: 'replace', path, value }],
       })
+      return
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('[form-builder] update failed for', path, error)
+      lastError = error
     }
   }
+  throw lastError || new Error('Could not patch formConfig')
 }
 
-async function applyToBlock() {
-  if (!connection) {
-    setSyncStatus('Not connected to Universal Editor (standalone preview).')
-    return
-  }
+async function doSync() {
+  if (!connection || !boundEditable) return
+  const value = JSON.stringify(toConfigJSON(spec))
+  const fieldCount = spec.fields.length
   try {
-    const container = await resolveFormContainer(connection)
-    if (!container) {
-      setSyncStatus('No Form block found. Click the Form block on the page, then apply. (See console: [form-builder] editorState)')
-      toast('negative', 'Select the Form block first')
-      return
-    }
-    const total = spec.fields.length
-    setSyncStatus(`Adding ${total} field(s) to the Form block…`)
-    for (const field of spec.fields) {
-      // sequential so ordering is preserved (add appends as last child)
-      await addFieldToContainer(connection, container, field)
-    }
-    setSyncStatus(`Done. Added ${total} field(s) to the selected Form block.`)
-    toast('positive', 'Form fields added to the block')
-    await connection.host.editorActions.refreshPage?.()
+    await patchFormConfig(boundEditable, value)
+    setSyncStatus(`Synced ${fieldCount} field(s) to page preview.`, { hideAfterMs: 2000 })
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.error('[form-builder] apply failed', error)
-    setSyncStatus(`Failed: ${error?.message || error}`)
-    toast('negative', 'Failed to add fields (see console)')
+    console.error('[form-builder] sync failed', error)
+    setSyncStatus(`Sync failed: ${error?.message || error}`)
   }
 }
 
-function persist() {
-  saveSpec(spec)
-  renderPreview()
+function loadConfigIntoRail(config) {
+  suppressSync = true
+  spec = fromConfig(config)
+  titleEl.value = spec.title || ''
+  submitLabelEl.value = spec.submitLabel || ''
+  renderFields()
+  suppressSync = false
 }
 
-function renderPreview() {
-  renderForm(spec, previewEl)
+async function bindTo(editable, resource, state) {
+  boundEditable = editable
+  boundResource = resource
+  setBoundStatus('Authoring Form block — preview updates on the page (left).')
+
+  const existing = await loadConfigFromState(editable, state)
+  if (existing?.fields?.length) {
+    loadConfigIntoRail(existing)
+    setSyncStatus(`Loaded ${existing.fields.length} saved field(s).`, { hideAfterMs: 2000 })
+  } else if (existing) {
+    loadConfigIntoRail(existing)
+  } else {
+    loadConfigIntoRail(emptySpec())
+  }
 }
 
-function fieldRow(field) {
-  const wrap = document.createElement('div')
-  wrap.className = 'field-card'
+function unbind() {
+  boundEditable = null
+  boundResource = null
+  setBoundStatus('Select a Form block on the page to author it.')
+  setSyncStatus('')
+}
 
-  const header = document.createElement('div')
-  header.className = 'field-card-head'
-  const title = document.createElement('span')
-  title.textContent = field.label || 'Untitled field'
-  const remove = document.createElement('button')
-  remove.type = 'button'
-  remove.className = 'btn-remove'
-  remove.textContent = 'Remove'
-  remove.addEventListener('click', () => {
-    spec.fields = spec.fields.filter((f) => f.id !== field.id)
-    render()
-    persist()
-  })
-  header.append(title, remove)
-  wrap.appendChild(header)
+async function pollSelection() {
+  if (!connection) return
+  try {
+    const state = await connection.host.editorState.get()
+    const container = resolveFormContainer(state)
+    const resource = container?.resource || container?.id || null
 
-  wrap.appendChild(labeledInput('Label', field.label, (v) => {
-    field.label = v
-    title.textContent = v || 'Untitled field'
-    persist()
-  }))
-
-  wrap.appendChild(labeledInput('Name (field key)', field.name, (v) => {
-    field.name = v
-    persist()
-  }))
-
-  const typeSelect = document.createElement('select')
-  for (const t of INPUT_TYPES) {
-    const opt = document.createElement('option')
-    opt.value = t.value
-    opt.textContent = t.label
-    if (t.value === field.type) opt.selected = true
-    typeSelect.appendChild(opt)
+    if (resource && resource !== boundResource) {
+      await bindTo(container, resource, state)
+    } else if (!resource && boundResource) {
+      unbind()
+    } else if (!resource) {
+      const count = (state?.editables || []).filter(isFormContainer).length
+      if (count > 1) {
+        setBoundStatus('Multiple forms on page — select one to author.')
+      } else if (count === 0) {
+        setBoundStatus('Add a Form block to the page, then author here.')
+      }
+    }
+  } catch {
+    // editorState not available yet
   }
-  typeSelect.addEventListener('change', () => {
-    field.type = typeSelect.value
-    render()
-    persist()
-  })
-  wrap.appendChild(labeled('Type', typeSelect))
+}
 
-  if (field.type !== 'checkbox') {
-    wrap.appendChild(labeledInput('Placeholder', field.placeholder, (v) => {
-      field.placeholder = v
-      persist()
-    }))
-  }
-
-  const requiredLabel = document.createElement('label')
-  requiredLabel.className = 'field-required'
-  const requiredInput = document.createElement('input')
-  requiredInput.type = 'checkbox'
-  requiredInput.checked = !!field.required
-  requiredInput.addEventListener('change', () => {
-    field.required = requiredInput.checked
-    persist()
-  })
-  const requiredText = document.createElement('span')
-  requiredText.textContent = 'Required'
-  requiredLabel.append(requiredInput, requiredText)
-  wrap.appendChild(requiredLabel)
-
-  if (typeSupportsOptions(field.type)) {
-    wrap.appendChild(optionsEditor(field))
-  }
-
-  return wrap
+function persistAndSync() {
+  if (!connection) saveSpec(spec)
+  scheduleSync()
 }
 
 function optionsEditor(field) {
@@ -266,7 +420,7 @@ function optionsEditor(field) {
     input.addEventListener('input', () => {
       opt.label = input.value
       opt.value = input.value
-      persist()
+      persistAndSync()
     })
     const del = document.createElement('button')
     del.type = 'button'
@@ -274,8 +428,8 @@ function optionsEditor(field) {
     del.textContent = '✕'
     del.addEventListener('click', () => {
       field.options = field.options.filter((o) => o !== opt)
-      render()
-      persist()
+      renderFields()
+      persistAndSync()
     })
     row.append(input, del)
     box.appendChild(row)
@@ -288,8 +442,8 @@ function optionsEditor(field) {
   add.addEventListener('click', () => {
     field.options = field.options || []
     field.options.push({ label: 'Option', value: 'Option' })
-    render()
-    persist()
+    renderFields()
+    persistAndSync()
   })
   box.appendChild(add)
   return box
@@ -313,36 +467,102 @@ function labeledInput(labelText, value, onInput) {
   return labeled(labelText, input)
 }
 
-function render() {
+function fieldRow(field) {
+  const wrap = document.createElement('div')
+  wrap.className = 'field-card'
+
+  const header = document.createElement('div')
+  header.className = 'field-card-head'
+  const title = document.createElement('span')
+  title.textContent = field.label || 'Untitled field'
+  const remove = document.createElement('button')
+  remove.type = 'button'
+  remove.className = 'btn-remove'
+  remove.textContent = 'Remove'
+  remove.addEventListener('click', () => {
+    spec.fields = spec.fields.filter((f) => f.id !== field.id)
+    renderFields()
+    persistAndSync()
+  })
+  header.append(title, remove)
+  wrap.appendChild(header)
+
+  wrap.appendChild(labeledInput('Label', field.label, (v) => {
+    field.label = v
+    title.textContent = v || 'Untitled field'
+    persistAndSync()
+  }))
+
+  wrap.appendChild(labeledInput('Name (field key)', field.name, (v) => {
+    field.name = v
+    persistAndSync()
+  }))
+
+  const typeSelect = document.createElement('select')
+  INPUT_TYPES.forEach((t) => {
+    const opt = document.createElement('option')
+    opt.value = t.value
+    opt.textContent = t.label
+    if (t.value === field.type) opt.selected = true
+    typeSelect.appendChild(opt)
+  })
+  typeSelect.addEventListener('change', () => {
+    field.type = typeSelect.value
+    renderFields()
+    persistAndSync()
+  })
+  wrap.appendChild(labeled('Type', typeSelect))
+
+  if (field.type !== 'checkbox') {
+    wrap.appendChild(labeledInput('Placeholder', field.placeholder, (v) => {
+      field.placeholder = v
+      persistAndSync()
+    }))
+  }
+
+  const requiredLabel = document.createElement('label')
+  requiredLabel.className = 'field-required'
+  const requiredInput = document.createElement('input')
+  requiredInput.type = 'checkbox'
+  requiredInput.checked = !!field.required
+  requiredInput.addEventListener('change', () => {
+    field.required = requiredInput.checked
+    persistAndSync()
+  })
+  const requiredText = document.createElement('span')
+  requiredText.textContent = 'Required'
+  requiredLabel.append(requiredInput, requiredText)
+  wrap.appendChild(requiredLabel)
+
+  if (typeSupportsOptions(field.type)) {
+    wrap.appendChild(optionsEditor(field))
+  }
+
+  return wrap
+}
+
+function renderFields() {
   fieldsEl.innerHTML = ''
   spec.fields.forEach((field) => fieldsEl.appendChild(fieldRow(field)))
-  renderPreview()
 }
 
 function init() {
-  titleEl.value = spec.title || ''
-  submitLabelEl.value = spec.submitLabel || ''
-
   titleEl.addEventListener('input', () => {
     spec.title = titleEl.value
-    persist()
+    persistAndSync()
   })
   submitLabelEl.addEventListener('input', () => {
     spec.submitLabel = submitLabelEl.value
-    persist()
+    persistAndSync()
   })
 
   document.getElementById('addField').addEventListener('click', () => {
     spec.fields.push(createField())
-    render()
-    persist()
+    renderFields()
+    persistAndSync()
   })
 
-  document.getElementById('applyToBlock').addEventListener('click', () => {
-    applyToBlock()
-  })
-
-  render()
+  renderFields()
 
   const status = document.getElementById('railStatus')
   attach({ id: EXTENSION_ID })
@@ -350,10 +570,16 @@ function init() {
       connection = conn
       window.__guestConnection = conn
       if (status) status.textContent = 'Connected to Universal Editor.'
+
+      pollSelection()
+      setInterval(pollSelection, SELECTION_POLL_MS)
+      conn.addEventListener('contextchange', pollSelection)
     })
     .catch((error) => {
+      // eslint-disable-next-line no-console
       console.warn('Not attached to a host (standalone preview mode).', error)
       if (status) status.textContent = 'Standalone preview (not attached to a host).'
+      setBoundStatus('Connect to Universal Editor and select a Form block.')
     })
 }
 

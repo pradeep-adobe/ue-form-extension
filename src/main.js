@@ -1,21 +1,20 @@
 import './style.css'
 import { register } from '@adobe/uix-guest'
-import { loadSpec, renderForm, onSpecChange } from './formSpec.js'
+import { loadSpec, onSpecChange } from './formSpec.js'
+import { renderFormApp } from './formAppLoader.js'
 
 const EXTENSION_ID = 'com.example.ue-hosted-starter'
 
-function renderPageForm(spec) {
+async function renderPageForm(spec) {
   const output = document.getElementById('formOutput')
   if (!output) return
-  renderForm(spec, output, {
-    onSubmit: (data) => {
-      const result = document.getElementById('submitResult')
-      if (result) {
-        result.hidden = false
-        result.textContent = `Submitted: ${JSON.stringify(data)}`
-      }
-    },
-  })
+  try {
+    await renderFormApp(output, spec)
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Could not render form microfrontend', error)
+    output.innerHTML = '<p class="status">Unable to load the form app. Start tfs-form-app (<code>npm run dev</code>) and trust its certificate.</p>'
+  }
 }
 
 async function init() {
