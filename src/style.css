@@ -71,11 +71,12 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin: 0 0 1rem;
 }
 
 .builder-section h2 {
   font-size: 1rem;
-  margin: 0 0 10px;
+  margin: 0;
 }
 
 .field-card {
@@ -84,14 +85,78 @@ button {
   padding: 12px;
   margin-bottom: 12px;
   background: #f8fafc;
+  transition: opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field-card.dragging {
+  opacity: 0.4;
+}
+
+.field-card.drag-over {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.25);
+}
+
+.field-card.is-collapsed {
+  padding-bottom: 12px;
 }
 
 .field-card-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   margin-bottom: 8px;
   font-weight: 600;
+  cursor: grab;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: #94a3b8;
+  font-size: 1rem;
+  line-height: 1;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.btn-toggle {
+  background: transparent;
+  color: #475569;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.field-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.field-card-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-card-type {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.field-card-body {
+  margin-top: 4px;
 }
 
 .labeled {
@@ -142,6 +207,25 @@ button {
   color: #dc2626;
   padding: 2px 6px;
   font-size: 0.8rem;
+}
+
+.field-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-move {
+  background: transparent;
+  color: #475569;
+  padding: 2px 8px;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.btn-move:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
 }
 
 .preview-box {
