@@ -29,6 +29,18 @@ body {
 
 .rail-shell h1 {
   font-size: 1.25rem;
+  margin: 0;
+}
+
+.rail-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.rail-brand-icon {
+  flex-shrink: 0;
 }
 
 h1 {
