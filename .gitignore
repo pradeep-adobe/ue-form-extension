@@ -3,3 +3,5 @@ dist/
 src/universal-editor-ui-1/dist/
 .env
 .aio
+.aws.tmp.creds.json
+.parcel-cache/
