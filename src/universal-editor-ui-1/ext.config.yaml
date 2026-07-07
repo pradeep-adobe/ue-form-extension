@@ -1,0 +1,10 @@
+operations:
+  view:
+    - type: web
+      impl: index.html
+web: ../..
+dist: dist/web-prod
+hooks:
+  pre-app-build: node node_modules/@adobe/uix-guest/scripts/generate-metadata.js
+  pre-app-deploy: node node_modules/@adobe/uix-guest/scripts/generate-metadata.js
+  build-static: ./hooks/build-static.cjs

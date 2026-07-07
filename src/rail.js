@@ -6,8 +6,7 @@ import {
   saveSpec,
   typeSupportsOptions,
 } from './formSpec.js'
-
-const EXTENSION_ID = 'com.example.ue-hosted-starter'
+import { EXTENSION_ID } from './extensionId.js'
 const SYNC_DEBOUNCE_MS = 200
 const SELECTION_POLL_MS = 300
 
