@@ -1,14 +1,24 @@
 {
-  "name": "ue-extension-starter",
+  "name": "tfs-form-extension",
   "private": true,
+  "version": "0.1.0",
   "type": "module",
+  "description": "Universal Editor Form Builder extension for TFS forms.",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "vite",
+    "dev:studio": "vite --open /dev.html",
     "build": "vite build",
-    "preview": "vite preview"
+    "build:metadata": "node node_modules/@adobe/uix-guest/scripts/generate-metadata.js",
+    "preview": "vite preview",
+    "deploy": "npm run build && aio app deploy"
   },
   "dependencies": {
-    "@adobe/uix-guest": "^1.0.0"
+    "@adobe/uix-guest": "^1.0.0",
+    "ajv": "^8.12.0",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "vite": "^5.4.0"

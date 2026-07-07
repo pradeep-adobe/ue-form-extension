@@ -1,9 +1,10 @@
 import './style.css'
 import { register } from '@adobe/uix-guest'
+import metadata from './app-metadata.json'
 import { loadSpec, onSpecChange } from './formSpec.js'
 import { renderFormApp } from './formAppLoader.js'
-
-const EXTENSION_ID = 'com.example.ue-hosted-starter'
+import { EXTENSION_ID } from './extensionId.js'
+import { EXTENSION_ICON } from './extensionIcon.js'
 
 async function renderPageForm(spec) {
   const output = document.getElementById('formOutput')
@@ -27,6 +28,7 @@ async function init() {
 
   const guestConnection = await register({
     id: EXTENSION_ID,
+    metadata,
     methods: {
       rightPanel: {
         addRails() {
@@ -35,7 +37,7 @@ async function init() {
               id: 'form-builder-rail',
               header: 'Form Builder',
               url: '/rail.html',
-              icon: 'Form',
+              icon: EXTENSION_ICON,
             },
           ]
         },

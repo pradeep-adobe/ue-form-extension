@@ -1,7 +1,6 @@
 import './style.css'
 import { attach } from '@adobe/uix-guest'
-
-const EXTENSION_ID = 'com.example.ue-hosted-starter'
+import { EXTENSION_ID } from './extensionId.js'
 
 async function init() {
   const status = document.getElementById('modalStatus')

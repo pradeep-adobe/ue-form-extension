@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Form Builder Dev Studio</title>
+    <link rel="icon" type="image/png" href="./icons/online-form-icon.png" />
+    <script type="module" src="/src/devStudio.js"></script>
+  </head>
+  <body>
+    <div class="dev-studio">
+      <header class="dev-studio-header">
+        <div>
+          <div class="dev-studio-title">
+            <img src="./icons/online-form-icon.png" alt="" width="32" height="32" />
+            <h1>Form Builder Dev Studio</h1>
+          </div>
+          <p class="dev-studio-lead">
+            Author on the left, preview with the real <code>tfs-form-app</code> bundle on the right.
+            Start <code>tfs-form-app</code> first (<code>npm run dev</code> on port 3001).
+          </p>
+        </div>
+        <div class="dev-studio-header-actions">
+          <a class="dev-link" href="/rail.html">UE rail</a>
+          <a class="dev-link" href="/">Extension home</a>
+        </div>
+      </header>
+
+      <p id="appStatus" class="dev-app-status">Loading form app…</p>
+
+      <div class="dev-studio-panels">
+        <section class="dev-panel dev-panel--author" aria-label="Form authoring">
+          <div class="dev-panel-head">
+            <h2>Authoring</h2>
+            <div class="dev-toolbar">
+              <button id="resetSpec" type="button" class="btn-secondary">Reset sample</button>
+              <button id="copyJson" type="button" class="btn-secondary">Copy formConfig JSON</button>
+            </div>
+          </div>
+          <div id="authorPanel"></div>
+        </section>
+
+        <section class="dev-panel dev-panel--preview" aria-label="Live preview">
+          <div class="dev-panel-head">
+            <h2>Preview</h2>
+            <span id="previewStatus" class="dev-preview-status">Waiting for changes…</span>
+          </div>
+          <div id="previewHost" class="dev-preview-host"></div>
+        </section>
+      </div>
+    </div>
+  </body>
+</html>
