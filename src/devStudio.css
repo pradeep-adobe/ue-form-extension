@@ -1,0 +1,142 @@
+.dev-studio {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f1f5f9;
+}
+
+.dev-studio-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 12px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dev-studio-header h1 {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+}
+
+.dev-studio-lead {
+  margin: 0;
+  max-width: 52rem;
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.dev-studio-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.dev-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.dev-app-status {
+  margin: 12px 24px 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.dev-app-status[data-variant='success'] {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.dev-app-status[data-variant='error'] {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.dev-studio-panels {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+  gap: 16px;
+  padding: 16px 24px 24px;
+  min-height: 0;
+}
+
+.dev-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 180px);
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.dev-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fafafa;
+}
+
+.dev-panel-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.dev-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dev-preview-status {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.dev-panel--author #authorPanel {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.dev-preview-host {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.dev-preview-error {
+  margin: 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+@media (max-width: 960px) {
+  .dev-studio-panels {
+    grid-template-columns: 1fr;
+  }
+
+  .dev-panel {
+    min-height: auto;
+  }
+}
