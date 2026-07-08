@@ -214,16 +214,21 @@ function toConfigJSON(currentSpec) {
   return {
     title: currentSpec.title || '',
     submitLabel: currentSpec.submitLabel || 'Submit',
-    fields: (currentSpec.fields || []).map((field, index) => ({
-      type: field.type,
-      label: field.label,
-      name: field.name || slugify(field.label, `field-${index}`),
-      placeholder: field.placeholder || '',
-      required: !!field.required,
-      options: (field.options || [])
-        .map((opt) => (typeof opt === 'string' ? opt : opt.label || opt.value || ''))
-        .filter(Boolean),
-    })),
+    fields: (currentSpec.fields || []).map((field, index) => {
+      if (field.type === 'fragment') {
+        return { type: 'fragment', path: field.path || '' }
+      }
+      return {
+        type: field.type,
+        label: field.label,
+        name: field.name || slugify(field.label, `field-${index}`),
+        placeholder: field.placeholder || '',
+        required: !!field.required,
+        options: (field.options || [])
+          .map((opt) => (typeof opt === 'string' ? opt : opt.label || opt.value || ''))
+          .filter(Boolean),
+      }
+    }),
   }
 }
 
@@ -231,16 +236,21 @@ function fromConfig(config) {
   return {
     title: config.title || '',
     submitLabel: config.submitLabel || 'Submit',
-    fields: (config.fields || []).map((field) => createField({
-      type: field.type || 'text',
-      label: field.label || '',
-      name: field.name || '',
-      placeholder: field.placeholder || '',
-      required: !!field.required,
-      options: (field.options || []).map((opt) => (
-        typeof opt === 'string' ? { label: opt, value: opt } : opt
-      )),
-    })),
+    fields: (config.fields || []).map((field) => {
+      if (field.type === 'fragment') {
+        return createField({ type: 'fragment', path: field.path || '' })
+      }
+      return createField({
+        type: field.type || 'text',
+        label: field.label || '',
+        name: field.name || '',
+        placeholder: field.placeholder || '',
+        required: !!field.required,
+        options: (field.options || []).map((opt) => (
+          typeof opt === 'string' ? { label: opt, value: opt } : opt
+        )),
+      })
+    }),
   }
 }
 
@@ -498,6 +508,11 @@ function toggleCollapsed(field) {
   renderFields()
 }
 
+function cardTitleText(field) {
+  if (field.type === 'fragment') return field.path || 'No path set'
+  return field.label || 'Untitled field'
+}
+
 function fieldRow(field, index, total) {
   const collapsed = collapsedFieldIds.has(field.id)
 
@@ -554,7 +569,7 @@ function fieldRow(field, index, total) {
 
   const title = document.createElement('span')
   title.className = 'field-card-title'
-  title.textContent = field.label || 'Untitled field'
+  title.textContent = cardTitleText(field)
 
   const typeBadge = document.createElement('span')
   typeBadge.className = 'field-card-type'
@@ -601,17 +616,6 @@ function fieldRow(field, index, total) {
   body.className = 'field-card-body'
   body.hidden = collapsed
 
-  body.appendChild(labeledInput('Label', field.label, (v) => {
-    field.label = v
-    title.textContent = v || 'Untitled field'
-    persistAndSync()
-  }))
-
-  body.appendChild(labeledInput('Name (field key)', field.name, (v) => {
-    field.name = v
-    persistAndSync()
-  }))
-
   const typeSelect = document.createElement('select')
   INPUT_TYPES.forEach((t) => {
     const opt = document.createElement('option')
@@ -626,6 +630,35 @@ function fieldRow(field, index, total) {
     persistAndSync()
   })
   body.appendChild(labeled('Type', typeSelect))
+
+  if (field.type === 'fragment') {
+    const pathField = labeledInput('Fragment path', field.path, (v) => {
+      field.path = v
+      title.textContent = cardTitleText(field)
+      persistAndSync()
+    })
+    pathField.querySelector('input').placeholder = '/fragments/personal-info'
+    body.appendChild(pathField)
+
+    const hint = document.createElement('p')
+    hint.className = 'field-hint'
+    hint.textContent = 'Inserts the fields from the Form block at this path. Edits to that fragment automatically apply everywhere it is referenced.'
+    body.appendChild(hint)
+
+    wrap.appendChild(body)
+    return wrap
+  }
+
+  body.appendChild(labeledInput('Label', field.label, (v) => {
+    field.label = v
+    title.textContent = cardTitleText(field)
+    persistAndSync()
+  }))
+
+  body.appendChild(labeledInput('Name (field key)', field.name, (v) => {
+    field.name = v
+    persistAndSync()
+  }))
 
   if (field.type !== 'checkbox') {
     body.appendChild(labeledInput('Placeholder', field.placeholder, (v) => {

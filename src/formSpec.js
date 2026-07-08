@@ -10,6 +10,7 @@ export const INPUT_TYPES = [
   { value: 'select', label: 'Dropdown' },
   { value: 'radio', label: 'Radio group' },
   { value: 'checkbox', label: 'Checkbox' },
+  { value: 'fragment', label: 'Fragment (reusable fields)' },
 ]
 
 const OPTION_TYPES = new Set(['select', 'radio'])
@@ -27,6 +28,7 @@ export function createField(overrides = {}) {
     placeholder: '',
     required: false,
     options: [],
+    path: '',
     ...overrides,
   }
 }
