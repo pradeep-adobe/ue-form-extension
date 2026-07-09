@@ -6,8 +6,13 @@ import {
   saveSpec,
   typeSupportsOptions,
 } from './formSpec.js'
-
-const EXTENSION_ID = 'com.example.ue-hosted-starter'
+import {
+  createRulesEditor,
+  fieldSupportsRules,
+  parseRules,
+  serializeRules,
+} from './fieldRules.js'
+import { EXTENSION_ID } from './extensionId.js'
 const SYNC_DEBOUNCE_MS = 200
 const SELECTION_POLL_MS = 300
 
@@ -17,6 +22,9 @@ let connection = null
 let boundEditable = null
 let boundResource = null
 let suppressSync = false
+
+let draggedFieldId = null
+const collapsedFieldIds = new Set()
 
 const fieldsEl = document.getElementById('fields')
 const titleEl = document.getElementById('formTitle')
@@ -212,16 +220,23 @@ function toConfigJSON(currentSpec) {
   return {
     title: currentSpec.title || '',
     submitLabel: currentSpec.submitLabel || 'Submit',
-    fields: (currentSpec.fields || []).map((field, index) => ({
-      type: field.type,
-      label: field.label,
-      name: field.name || slugify(field.label, `field-${index}`),
-      placeholder: field.placeholder || '',
-      required: !!field.required,
-      options: (field.options || [])
-        .map((opt) => (typeof opt === 'string' ? opt : opt.label || opt.value || ''))
-        .filter(Boolean),
-    })),
+    fields: (currentSpec.fields || []).map((field, index) => {
+      if (field.type === 'fragment') {
+        return { type: 'fragment', path: field.path || '' }
+      }
+      const serializedRules = serializeRules(field.rules)
+      return {
+        type: field.type,
+        label: field.label,
+        name: field.name || slugify(field.label, `field-${index}`),
+        placeholder: field.placeholder || '',
+        required: !!field.required,
+        options: (field.options || [])
+          .map((opt) => (typeof opt === 'string' ? opt : opt.label || opt.value || ''))
+          .filter(Boolean),
+        ...(serializedRules ? { rules: serializedRules } : {}),
+      }
+    }),
   }
 }
 
@@ -229,16 +244,22 @@ function fromConfig(config) {
   return {
     title: config.title || '',
     submitLabel: config.submitLabel || 'Submit',
-    fields: (config.fields || []).map((field) => createField({
-      type: field.type || 'text',
-      label: field.label || '',
-      name: field.name || '',
-      placeholder: field.placeholder || '',
-      required: !!field.required,
-      options: (field.options || []).map((opt) => (
-        typeof opt === 'string' ? { label: opt, value: opt } : opt
-      )),
-    })),
+    fields: (config.fields || []).map((field) => {
+      if (field.type === 'fragment') {
+        return createField({ type: 'fragment', path: field.path || '' })
+      }
+      return createField({
+        type: field.type || 'text',
+        label: field.label || '',
+        name: field.name || '',
+        placeholder: field.placeholder || '',
+        required: !!field.required,
+        options: (field.options || []).map((opt) => (
+          typeof opt === 'string' ? { label: opt, value: opt } : opt
+        )),
+        rules: parseRules(field.rules),
+      })
+    }),
   }
 }
 
@@ -344,6 +365,8 @@ async function doSync() {
 function loadConfigIntoRail(config) {
   suppressSync = true
   spec = fromConfig(config)
+  collapsedFieldIds.clear()
+  spec.fields.forEach((field) => collapsedFieldIds.add(field.id))
   titleEl.value = spec.title || ''
   submitLabelEl.value = spec.submitLabel || ''
   renderFields()
@@ -467,36 +490,140 @@ function labeledInput(labelText, value, onInput) {
   return labeled(labelText, input)
 }
 
-function fieldRow(field) {
+function moveField(field, offset) {
+  const index = spec.fields.findIndex((f) => f.id === field.id)
+  const target = index + offset
+  if (index < 0 || target < 0 || target >= spec.fields.length) return
+  const [moved] = spec.fields.splice(index, 1)
+  spec.fields.splice(target, 0, moved)
+  renderFields()
+  persistAndSync()
+}
+
+function reorderFieldsByDrop(sourceId, targetId) {
+  const fromIndex = spec.fields.findIndex((f) => f.id === sourceId)
+  let toIndex = spec.fields.findIndex((f) => f.id === targetId)
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return
+  const [moved] = spec.fields.splice(fromIndex, 1)
+  if (fromIndex < toIndex) toIndex -= 1
+  spec.fields.splice(toIndex, 0, moved)
+  renderFields()
+  persistAndSync()
+}
+
+function toggleCollapsed(field) {
+  if (collapsedFieldIds.has(field.id)) collapsedFieldIds.delete(field.id)
+  else collapsedFieldIds.add(field.id)
+  renderFields()
+}
+
+function cardTitleText(field) {
+  if (field.type === 'fragment') return field.path || 'No path set'
+  return field.label || 'Untitled field'
+}
+
+function fieldRow(field, index, total) {
+  const collapsed = collapsedFieldIds.has(field.id)
+
   const wrap = document.createElement('div')
   wrap.className = 'field-card'
+  wrap.classList.toggle('is-collapsed', collapsed)
+  wrap.draggable = true
+
+  wrap.addEventListener('dragstart', (event) => {
+    if (event.target.closest('input, select, textarea, button')) {
+      event.preventDefault()
+      return
+    }
+    draggedFieldId = field.id
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', field.id)
+    wrap.classList.add('dragging')
+  })
+  wrap.addEventListener('dragend', () => {
+    draggedFieldId = null
+    wrap.classList.remove('dragging')
+    fieldsEl.querySelectorAll('.field-card.drag-over')
+      .forEach((el) => el.classList.remove('drag-over'))
+  })
+  wrap.addEventListener('dragover', (event) => {
+    if (!draggedFieldId || draggedFieldId === field.id) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    wrap.classList.add('drag-over')
+  })
+  wrap.addEventListener('dragleave', () => wrap.classList.remove('drag-over'))
+  wrap.addEventListener('drop', (event) => {
+    event.preventDefault()
+    wrap.classList.remove('drag-over')
+    if (!draggedFieldId || draggedFieldId === field.id) return
+    reorderFieldsByDrop(draggedFieldId, field.id)
+  })
 
   const header = document.createElement('div')
   header.className = 'field-card-head'
+
+  const handle = document.createElement('span')
+  handle.className = 'drag-handle'
+  handle.textContent = '⠿'
+  handle.title = 'Drag to reorder'
+  handle.setAttribute('aria-hidden', 'true')
+
+  const toggle = document.createElement('button')
+  toggle.type = 'button'
+  toggle.className = 'btn-toggle'
+  toggle.textContent = collapsed ? '▸' : '▾'
+  toggle.setAttribute('aria-label', collapsed ? 'Expand field' : 'Collapse field')
+  toggle.addEventListener('click', () => toggleCollapsed(field))
+
   const title = document.createElement('span')
-  title.textContent = field.label || 'Untitled field'
+  title.className = 'field-card-title'
+  title.textContent = cardTitleText(field)
+
+  const typeBadge = document.createElement('span')
+  typeBadge.className = 'field-card-type'
+  typeBadge.textContent = INPUT_TYPES.find((t) => t.value === field.type)?.label || field.type
+
+  const titleGroup = document.createElement('span')
+  titleGroup.className = 'field-card-title-group'
+  titleGroup.append(title, typeBadge)
+
+  const actions = document.createElement('div')
+  actions.className = 'field-card-actions'
+
+  const moveUp = document.createElement('button')
+  moveUp.type = 'button'
+  moveUp.className = 'btn-move'
+  moveUp.textContent = '↑'
+  moveUp.setAttribute('aria-label', 'Move field up')
+  moveUp.disabled = index === 0
+  moveUp.addEventListener('click', () => moveField(field, -1))
+
+  const moveDown = document.createElement('button')
+  moveDown.type = 'button'
+  moveDown.className = 'btn-move'
+  moveDown.textContent = '↓'
+  moveDown.setAttribute('aria-label', 'Move field down')
+  moveDown.disabled = index === total - 1
+  moveDown.addEventListener('click', () => moveField(field, 1))
+
   const remove = document.createElement('button')
   remove.type = 'button'
   remove.className = 'btn-remove'
   remove.textContent = 'Remove'
   remove.addEventListener('click', () => {
     spec.fields = spec.fields.filter((f) => f.id !== field.id)
+    collapsedFieldIds.delete(field.id)
     renderFields()
     persistAndSync()
   })
-  header.append(title, remove)
+  actions.append(moveUp, moveDown, remove)
+  header.append(handle, toggle, titleGroup, actions)
   wrap.appendChild(header)
 
-  wrap.appendChild(labeledInput('Label', field.label, (v) => {
-    field.label = v
-    title.textContent = v || 'Untitled field'
-    persistAndSync()
-  }))
-
-  wrap.appendChild(labeledInput('Name (field key)', field.name, (v) => {
-    field.name = v
-    persistAndSync()
-  }))
+  const body = document.createElement('div')
+  body.className = 'field-card-body'
+  body.hidden = collapsed
 
   const typeSelect = document.createElement('select')
   INPUT_TYPES.forEach((t) => {
@@ -511,10 +638,39 @@ function fieldRow(field) {
     renderFields()
     persistAndSync()
   })
-  wrap.appendChild(labeled('Type', typeSelect))
+  body.appendChild(labeled('Type', typeSelect))
+
+  if (field.type === 'fragment') {
+    const pathField = labeledInput('Fragment path', field.path, (v) => {
+      field.path = v
+      title.textContent = cardTitleText(field)
+      persistAndSync()
+    })
+    pathField.querySelector('input').placeholder = '/fragments/personal-info'
+    body.appendChild(pathField)
+
+    const hint = document.createElement('p')
+    hint.className = 'field-hint'
+    hint.textContent = 'Inserts the fields from the Form block at this path. Edits to that fragment automatically apply everywhere it is referenced.'
+    body.appendChild(hint)
+
+    wrap.appendChild(body)
+    return wrap
+  }
+
+  body.appendChild(labeledInput('Label', field.label, (v) => {
+    field.label = v
+    title.textContent = cardTitleText(field)
+    persistAndSync()
+  }))
+
+  body.appendChild(labeledInput('Name (field key)', field.name, (v) => {
+    field.name = v
+    persistAndSync()
+  }))
 
   if (field.type !== 'checkbox') {
-    wrap.appendChild(labeledInput('Placeholder', field.placeholder, (v) => {
+    body.appendChild(labeledInput('Placeholder', field.placeholder, (v) => {
       field.placeholder = v
       persistAndSync()
     }))
@@ -532,18 +688,29 @@ function fieldRow(field) {
   const requiredText = document.createElement('span')
   requiredText.textContent = 'Required'
   requiredLabel.append(requiredInput, requiredText)
-  wrap.appendChild(requiredLabel)
+  body.appendChild(requiredLabel)
 
   if (typeSupportsOptions(field.type)) {
-    wrap.appendChild(optionsEditor(field))
+    body.appendChild(optionsEditor(field))
   }
 
+  if (fieldSupportsRules(field.type)) {
+    body.appendChild(createRulesEditor(field, spec.fields, {
+      onChange: persistAndSync,
+      rerender: renderFields,
+      slugify,
+    }))
+  }
+
+  wrap.appendChild(body)
   return wrap
 }
 
 function renderFields() {
   fieldsEl.innerHTML = ''
-  spec.fields.forEach((field) => fieldsEl.appendChild(fieldRow(field)))
+  spec.fields.forEach((field, index) => (
+    fieldsEl.appendChild(fieldRow(field, index, spec.fields.length))
+  ))
 }
 
 function init() {

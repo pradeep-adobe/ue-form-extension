@@ -1,4 +1,5 @@
 import { TFS_FORM_APP } from './config.js'
+import { serializeRules } from './fieldRules.js'
 
 let appPromise
 
@@ -37,16 +38,23 @@ export function toAppSpec(spec) {
   return {
     title: spec.title || '',
     submitLabel: spec.submitLabel || 'Submit',
-    fields: (spec.fields || []).map((field, index) => ({
-      type: field.type,
-      label: field.label,
-      name: field.name || slugify(field.label, `field-${index}`),
-      placeholder: field.placeholder || '',
-      required: !!field.required,
-      options: (field.options || []).map((opt) => (
-        typeof opt === 'string' ? opt : opt.label || opt.value || ''
-      )).filter(Boolean),
-    })),
+    fields: (spec.fields || []).map((field, index) => {
+      if (field.type === 'fragment') {
+        return { type: 'fragment', path: field.path || '' }
+      }
+      const serializedRules = serializeRules(field.rules)
+      return {
+        type: field.type,
+        label: field.label,
+        name: field.name || slugify(field.label, `field-${index}`),
+        placeholder: field.placeholder || '',
+        required: !!field.required,
+        options: (field.options || []).map((opt) => (
+          typeof opt === 'string' ? opt : opt.label || opt.value || ''
+        )).filter(Boolean),
+        ...(serializedRules ? { rules: serializedRules } : {}),
+      }
+    }),
   }
 }
 

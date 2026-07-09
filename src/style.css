@@ -29,6 +29,18 @@ body {
 
 .rail-shell h1 {
   font-size: 1.25rem;
+  margin: 0;
+}
+
+.rail-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.rail-brand-icon {
+  flex-shrink: 0;
 }
 
 h1 {
@@ -71,11 +83,12 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin: 0 0 1rem;
 }
 
 .builder-section h2 {
   font-size: 1rem;
-  margin: 0 0 10px;
+  margin: 0;
 }
 
 .field-card {
@@ -84,14 +97,84 @@ button {
   padding: 12px;
   margin-bottom: 12px;
   background: #f8fafc;
+  transition: opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field-card.dragging {
+  opacity: 0.4;
+}
+
+.field-card.drag-over {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.25);
+}
+
+.field-card.is-collapsed {
+  padding-bottom: 12px;
 }
 
 .field-card-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   margin-bottom: 8px;
   font-weight: 600;
+  cursor: grab;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: #94a3b8;
+  font-size: 1rem;
+  line-height: 1;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.btn-toggle {
+  background: transparent;
+  color: #475569;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.field-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.field-card-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-card-type {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.field-card-body {
+  margin-top: 4px;
+}
+
+.field-hint {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: #94a3b8;
 }
 
 .labeled {
@@ -130,6 +213,53 @@ button {
   flex: 1;
 }
 
+.rules-accordion {
+  margin-top: 10px;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 8px;
+}
+
+.rules-accordion summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #3730a3;
+  list-style: none;
+}
+
+.rules-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.rules-box {
+  margin-top: 8px;
+}
+
+.rules-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.rule-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.rule-row select,
+.rule-row input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font: inherit;
+  background: white;
+}
+
 .btn-secondary {
   background: #e0e7ff;
   color: #3730a3;
@@ -142,6 +272,25 @@ button {
   color: #dc2626;
   padding: 2px 6px;
   font-size: 0.8rem;
+}
+
+.field-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-move {
+  background: transparent;
+  color: #475569;
+  padding: 2px 8px;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.btn-move:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
 }
 
 .preview-box {
