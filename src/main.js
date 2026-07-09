@@ -4,7 +4,6 @@ import metadata from './app-metadata.json'
 import { loadSpec, onSpecChange } from './formSpec.js'
 import { renderFormApp } from './formAppLoader.js'
 import { EXTENSION_ID } from './extensionId.js'
-import { EXTENSION_ICON } from './extensionIcon.js'
 
 async function renderPageForm(spec) {
   const output = document.getElementById('formOutput')
@@ -37,7 +36,7 @@ async function init() {
               id: 'form-builder-rail',
               header: 'Form Builder',
               url: '/rail.html',
-              icon: EXTENSION_ICON,
+              icon: 'Form',
             },
           ]
         },

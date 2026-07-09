@@ -3,6 +3,11 @@ import {
   createField,
   typeSupportsOptions,
 } from './formSpec.js'
+import {
+  createRulesEditor,
+  fieldSupportsRules,
+  serializeRules,
+} from './fieldRules.js'
 
 function slugify(value, fallback) {
   const slug = String(value || '')
@@ -76,7 +81,7 @@ function optionsEditor(field, notifyChange) {
   return box
 }
 
-function fieldRow(field, notifyChange) {
+function fieldRow(field, allFields, notifyChange) {
   const wrap = document.createElement('div')
   wrap.className = 'field-card'
 
@@ -147,6 +152,14 @@ function fieldRow(field, notifyChange) {
     wrap.appendChild(optionsEditor(field, notifyChange))
   }
 
+  if (fieldSupportsRules(field.type)) {
+    wrap.appendChild(createRulesEditor(field, allFields, {
+      onChange: () => notifyChange(),
+      rerender: () => notifyChange(true),
+      slugify,
+    }))
+  }
+
   return wrap
 }
 
@@ -188,7 +201,7 @@ export function mountDevBuilder(host, initialSpec, onChange) {
   const head = document.createElement('div')
   head.className = 'builder-head'
   const heading = document.createElement('h2')
-  heading.textContent = 'Inputs'
+  heading.textContent = 'Form Fields'
   const addFieldBtn = document.createElement('button')
   addFieldBtn.type = 'button'
   addFieldBtn.className = 'btn-secondary'
@@ -212,7 +225,7 @@ export function mountDevBuilder(host, initialSpec, onChange) {
   function renderFields() {
     fieldsEl.innerHTML = ''
     spec.fields.forEach((field) => {
-      fieldsEl.appendChild(fieldRow(field, notifyChange))
+      fieldsEl.appendChild(fieldRow(field, spec.fields, notifyChange))
     })
   }
 
@@ -266,15 +279,19 @@ export function toFormConfigJSON(spec) {
   return JSON.stringify({
     title: spec.title || '',
     submitLabel: spec.submitLabel || 'Submit',
-    fields: (spec.fields || []).map((field, index) => ({
-      type: field.type,
-      label: field.label,
-      name: field.name || slugify(field.label, `field-${index}`),
-      placeholder: field.placeholder || '',
-      required: !!field.required,
-      options: (field.options || [])
-        .map((opt) => (typeof opt === 'string' ? opt : opt.label || opt.value || ''))
-        .filter(Boolean),
-    })),
+    fields: (spec.fields || []).map((field, index) => {
+      const serializedRules = serializeRules(field.rules)
+      return {
+        type: field.type,
+        label: field.label,
+        name: field.name || slugify(field.label, `field-${index}`),
+        placeholder: field.placeholder || '',
+        required: !!field.required,
+        options: (field.options || [])
+          .map((opt) => (typeof opt === 'string' ? opt : opt.label || opt.value || ''))
+          .filter(Boolean),
+        ...(serializedRules ? { rules: serializedRules } : {}),
+      }
+    }),
   }, null, 2)
 }

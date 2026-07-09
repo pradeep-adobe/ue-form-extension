@@ -1,3 +1,5 @@
+import { defaultRules, parseRules } from './fieldRules.js'
+
 const STORAGE_KEY = 'ue-extension:form-spec'
 
 export const INPUT_TYPES = [
@@ -20,6 +22,7 @@ export function typeSupportsOptions(type) {
 }
 
 export function createField(overrides = {}) {
+  const { rules, ...rest } = overrides
   return {
     id: `field-${Math.random().toString(36).slice(2, 9)}`,
     type: 'text',
@@ -29,7 +32,8 @@ export function createField(overrides = {}) {
     required: false,
     options: [],
     path: '',
-    ...overrides,
+    rules: rules !== undefined ? parseRules(rules) : defaultRules(),
+    ...rest,
   }
 }
 

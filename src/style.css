@@ -213,6 +213,53 @@ button {
   flex: 1;
 }
 
+.rules-accordion {
+  margin-top: 10px;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 8px;
+}
+
+.rules-accordion summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #3730a3;
+  list-style: none;
+}
+
+.rules-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.rules-box {
+  margin-top: 8px;
+}
+
+.rules-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.rule-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.rule-row select,
+.rule-row input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font: inherit;
+  background: white;
+}
+
 .btn-secondary {
   background: #e0e7ff;
   color: #3730a3;

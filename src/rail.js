@@ -6,6 +6,12 @@ import {
   saveSpec,
   typeSupportsOptions,
 } from './formSpec.js'
+import {
+  createRulesEditor,
+  fieldSupportsRules,
+  parseRules,
+  serializeRules,
+} from './fieldRules.js'
 import { EXTENSION_ID } from './extensionId.js'
 const SYNC_DEBOUNCE_MS = 200
 const SELECTION_POLL_MS = 300
@@ -218,6 +224,7 @@ function toConfigJSON(currentSpec) {
       if (field.type === 'fragment') {
         return { type: 'fragment', path: field.path || '' }
       }
+      const serializedRules = serializeRules(field.rules)
       return {
         type: field.type,
         label: field.label,
@@ -227,6 +234,7 @@ function toConfigJSON(currentSpec) {
         options: (field.options || [])
           .map((opt) => (typeof opt === 'string' ? opt : opt.label || opt.value || ''))
           .filter(Boolean),
+        ...(serializedRules ? { rules: serializedRules } : {}),
       }
     }),
   }
@@ -249,6 +257,7 @@ function fromConfig(config) {
         options: (field.options || []).map((opt) => (
           typeof opt === 'string' ? { label: opt, value: opt } : opt
         )),
+        rules: parseRules(field.rules),
       })
     }),
   }
@@ -683,6 +692,14 @@ function fieldRow(field, index, total) {
 
   if (typeSupportsOptions(field.type)) {
     body.appendChild(optionsEditor(field))
+  }
+
+  if (fieldSupportsRules(field.type)) {
+    body.appendChild(createRulesEditor(field, spec.fields, {
+      onChange: persistAndSync,
+      rerender: renderFields,
+      slugify,
+    }))
   }
 
   wrap.appendChild(body)
