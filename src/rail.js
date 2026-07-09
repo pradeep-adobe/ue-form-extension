@@ -528,24 +528,7 @@ function fieldRow(field, index, total) {
   const wrap = document.createElement('div')
   wrap.className = 'field-card'
   wrap.classList.toggle('is-collapsed', collapsed)
-  wrap.draggable = true
 
-  wrap.addEventListener('dragstart', (event) => {
-    if (event.target.closest('input, select, textarea, button')) {
-      event.preventDefault()
-      return
-    }
-    draggedFieldId = field.id
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', field.id)
-    wrap.classList.add('dragging')
-  })
-  wrap.addEventListener('dragend', () => {
-    draggedFieldId = null
-    wrap.classList.remove('dragging')
-    fieldsEl.querySelectorAll('.field-card.drag-over')
-      .forEach((el) => el.classList.remove('drag-over'))
-  })
   wrap.addEventListener('dragover', (event) => {
     if (!draggedFieldId || draggedFieldId === field.id) return
     event.preventDefault()
@@ -568,6 +551,23 @@ function fieldRow(field, index, total) {
   handle.textContent = '⠿'
   handle.title = 'Drag to reorder'
   handle.setAttribute('aria-hidden', 'true')
+  // draggable lives only on the handle, not the whole card: an ancestor with
+  // draggable=true hijacks native text-selection drags inside descendant inputs
+  // (you couldn't select text in an expanded field without starting a reorder).
+  handle.draggable = true
+  handle.addEventListener('dragstart', (event) => {
+    draggedFieldId = field.id
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', field.id)
+    event.dataTransfer.setDragImage(wrap, 16, 16)
+    wrap.classList.add('dragging')
+  })
+  handle.addEventListener('dragend', () => {
+    draggedFieldId = null
+    wrap.classList.remove('dragging')
+    fieldsEl.querySelectorAll('.field-card.drag-over')
+      .forEach((el) => el.classList.remove('drag-over'))
+  })
 
   const toggle = document.createElement('button')
   toggle.type = 'button'
