@@ -121,12 +121,16 @@ button {
   font-weight: 600;
   cursor: grab;
 }
-
+.field-card.is-collapsed .field-card-head {
+  margin: 0;
+}
 .drag-handle {
   cursor: grab;
   color: #94a3b8;
-  font-size: 1rem;
+  font-size: 1.1rem;
   line-height: 1;
+  padding: 4px 6px;
+  margin: -4px -6px;
   user-select: none;
   flex-shrink: 0;
 }
